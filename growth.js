@@ -1,4 +1,5 @@
-const STORAGE_KEY = 'klassemonster-mid-v2';
+const STORAGE_KEY = 'klassemonster-mid-v3';
+const PREVIOUS_KEY = 'klassemonster-mid-v2';
 const LEGACY_KEY = 'klassemonster-mid-v1';
 const LEVEL_XP = 200;
 
@@ -46,6 +47,7 @@ const monsterColors = {
 };
 
 const defaultAppearances = {
+  robin: { body: 'blob', color: 'sage', horns: 'curl', eyes: 'round', mark: 'cheeks', accessory: 'none', home: 'meadow' },
   milan: { body: 'blob', color: 'sage', horns: 'curl', eyes: 'round', mark: 'cheeks', accessory: 'none', home: 'meadow' },
   emma: { body: 'mushroom', color: 'lavender', horns: 'none', eyes: 'star', mark: 'spot', accessory: 'wreath', home: 'library' },
   lars: { body: 'dragon', color: 'midnight', horns: 'short', eyes: 'focus', mark: 'stripe', accessory: 'headphones', home: 'dusk' },
@@ -54,6 +56,7 @@ const defaultAppearances = {
 };
 
 const sampleResults = {
+  robin: [],
   milan: demoResults,
   emma: [{ title: 'Het uitzicht vanaf de toren', percent: 90 }, { title: 'De laatste afslag', percent: 100 }, { title: 'Buiten bereik', percent: 80 }],
   lars: [{ title: 'De verborgen tunnel', percent: 80 }, { title: 'Het veld na de regen', percent: 75 }],
@@ -92,12 +95,28 @@ function readSaved(key) {
 }
 
 function freshProfile(reader) {
-  return { entries: [], drafts: {}, textSize: 1, saved: [], monsterName: reader.pet, look: { ...defaultAppearances[reader.id] } };
+  const profile = {
+    entries: [], drafts: {}, textSize: 1, saved: [], monsterName: reader.pet,
+    look: { ...defaultAppearances[reader.id] },
+    guide: { step: 0, hatched: reader.id !== 'robin' }
+  };
+  if (reader.id === 'emma') {
+    const now = Date.now();
+    profile.entries.push({
+      id: 'stad', correct: 4, count: 5, percent: 80, xp: 46, energy: 0,
+      answers: [1, 0, 2, 1, 2], date: now, sample: true
+    });
+    profile.drafts['tweede-proef'] = { step: 'vragen', index: 1, answers: [0, null, null, null], updated: now };
+    profile.saved = ['honderd-geleende-lampen', 'kaart-zonder-stippen'];
+  }
+  return profile;
 }
 
 function loadGrowthState() {
   const students = Object.fromEntries(demoReaders.map(reader => [reader.id, freshProfile(reader)]));
-  const saved = readSaved(STORAGE_KEY);
+  const current = readSaved(STORAGE_KEY);
+  const previous = current ? null : readSaved(PREVIOUS_KEY);
+  const saved = current ?? previous;
   const old = saved ? null : readSaved(LEGACY_KEY);
   const settings = saved ?? old ?? {};
 
@@ -105,11 +124,16 @@ function loadGrowthState() {
     const profile = saved?.students?.[reader.id] ?? (reader.id === 'milan' ? old : null);
     if (!profile || typeof profile !== 'object') continue;
     const account = students[reader.id];
-    if (Array.isArray(profile.entries)) account.entries = profile.entries;
-    if (profile.drafts && typeof profile.drafts === 'object') account.drafts = profile.drafts;
+    const seedExample = previous && reader.id === 'emma'
+      && !profile.entries?.length && !Object.keys(profile.drafts ?? {}).length && !profile.saved?.length;
+    if (!seedExample && Array.isArray(profile.entries)) account.entries = profile.entries;
+    if (!seedExample && profile.drafts && typeof profile.drafts === 'object') account.drafts = profile.drafts;
     if ([0, 1, 2].includes(profile.textSize)) account.textSize = profile.textSize;
-    if (Array.isArray(profile.saved)) account.saved = profile.saved.filter(id => typeof id === 'string');
+    if (!seedExample && Array.isArray(profile.saved)) account.saved = profile.saved.filter(id => typeof id === 'string');
     if (typeof profile.monsterName === 'string' && profile.monsterName.trim()) account.monsterName = profile.monsterName.trim().slice(0, 24);
+    if (Number.isInteger(profile.guide?.step) && profile.guide.step >= 0 && profile.guide.step <= 4) {
+      account.guide = { step: profile.guide.step, hatched: account.guide.hatched || Boolean(profile.guide.hatched) };
+    }
     for (const { id, items } of monsterSlots) {
       if (items.some(([key]) => key === profile.look?.[id])) account.look[id] = profile.look[id];
     }
@@ -117,7 +141,7 @@ function loadGrowthState() {
 
   const candidate = settings.activeStudent;
   return {
-    activeStudent: Object.hasOwn(students, candidate) ? candidate : 'milan',
+    activeStudent: Object.hasOwn(students, candidate) ? candidate : old ? 'milan' : 'robin',
     students,
     custom: Array.isArray(settings.custom) ? settings.custom : [],
     className: typeof settings.className === 'string' && settings.className ? settings.className : '1B',
@@ -157,13 +181,13 @@ function personalGrowth(state, studentId) {
     stage: growthStages[Math.min(level, growthStages.length) - 1],
     totalRead: initialResults.length + best.size,
     weekly: initialResults.length + thisWeek.size,
-    average: Math.round(scores.reduce((total, score) => total + score, 0) / scores.length)
+    average: scores.length ? Math.round(scores.reduce((total, score) => total + score, 0) / scores.length) : null
   };
 }
 
 function classGrowth(state) {
   const energyByStudent = Object.fromEntries(demoReaders.map(reader => [
-    reader.id, reader.classEnergy + new Set(state.students[reader.id].entries.map(entry => entry.id)).size
+    reader.id, reader.classEnergy + new Set(state.students[reader.id].entries.filter(entry => !entry.sample).map(entry => entry.id)).size
   ]));
   const energy = Object.values(energyByStudent).reduce((total, points) => total + points, 0);
   const stage = classStages.findLastIndex(stage => stage.energy <= energy);

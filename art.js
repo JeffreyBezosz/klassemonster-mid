@@ -159,21 +159,25 @@ function drawArtwork(container) {
     const ctx = canvas.getContext('2d');
     if (!ctx) continue;
     const drawing = canvas.dataset.art;
-    const cached = storyCoverCache.get(drawing);
+    const cacheKey = drawing === 'habitat' ? `${drawing}/${canvas.dataset.home}` : drawing;
+    const cached = storyCoverCache.get(cacheKey);
     if (cached && cached !== canvas) {
       ctx.drawImage(cached, 0, 0, canvas.width, canvas.height);
       continue;
     }
     ctx.save();
     ctx.scale(canvas.width / 800, canvas.height / 480);
+    ctx.clearRect(0, 0, 800, 480);
     if (drawing === 'radio') radioArt(ctx);
     else if (drawing === 'night') nightArt(ctx);
     else if (drawing === 'door') doorArt(ctx);
     else if (drawing === 'custom-monster') {
       const look = Object.fromEntries(monsterSlots.map(slot => [slot.id, canvas.dataset[slot.id]]));
-      drawCustomMonster(ctx, look, Number(canvas.dataset.level), canvas.dataset.giant === 'true');
-    } else if (Object.hasOwn(extraCovers, drawing)) extraCover(ctx, drawing);
+      drawCustomMonster(ctx, look, Number(canvas.dataset.level), canvas.dataset.giant === 'true', canvas.dataset.cutout === 'true');
+    } else if (drawing === 'habitat') backdrop(ctx, canvas.dataset.home);
+    else if (Object.hasOwn(expeditionArt, drawing)) expeditionArt[drawing](ctx);
+    else if (Object.hasOwn(extraCovers, drawing)) extraCover(ctx, drawing);
     ctx.restore();
-    if (drawing !== 'custom-monster') storyCoverCache.set(drawing, canvas);
+    if (drawing !== 'custom-monster') storyCoverCache.set(cacheKey, canvas);
   }
 }

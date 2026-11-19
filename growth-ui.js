@@ -1,13 +1,18 @@
 let activeMonsterSlot = 'body';
 
-function monsterCanvas(look, level, name, giant = false) {
+function monsterCanvas(look, level, name, giant = false, cutout = false) {
   const attributes = monsterSlots.map(({ id }) => `data-${id}="${escapeHTML(look[id])}"`).join(' ');
-  return `<canvas class="cover-art" data-art="custom-monster" data-level="${level}" data-giant="${giant}"
+  return `<canvas class="cover-art" data-art="custom-monster" data-level="${level}" data-giant="${giant}" data-cutout="${cutout}"
     ${attributes} width="800" height="480" role="img" aria-label="${escapeHTML(name)}"></canvas>`;
 }
 
 function monsterCard(progress) {
   const { look, monsterName } = player();
+  if (starterEgg()) return `<section class="panel monster-card starter-egg">
+    <h2>Mijn monsterei</h2>
+    <div class="monster-picture">${artwork('camp', 'cover-art')}<span class="level-tag">${progress.earned} XP</span></div>
+    <a class="text-link" href="${href('leerling', 'start')}">Broed je ei uit ${icon('arrow', 17)}</a>
+  </section>`;
   return `<section class="panel monster-card">
     <h2>Mijn monster</h2>
     <div class="monster-picture">${monsterCanvas(look, progress.level, monsterName)}<span class="level-tag">Level ${progress.level}</span></div>
@@ -19,6 +24,12 @@ function monsterCard(progress) {
 
 function monsterScreen() {
   const progress = getProgress();
+  if (starterEgg()) return pageHeading('Monsteratelier', 'Hier geef je jouw monster een eigen look.')
+    + `<section class="expedition-hero egg-gate">
+      <div class="expedition-copy"><h2>Wie zit er in dat ei?</h2><p>Broed het uit in de startgids. Daarna kun je hier je monster aanpassen.</p>
+        <a class="button primary" href="${href('leerling', 'start')}">Naar de startgids ${icon('arrow', 18)}</a></div>
+      <div class="expedition-hero-art">${campArtwork()}</div>
+    </section>`;
   return pageHeading('Monsteratelier', 'Je monster groeit met elke leesopdracht. Kies hoe het eruitziet.')
     + `<div id="atelier">${atelierContent(progress)}</div>`;
 }
@@ -61,6 +72,7 @@ function atelierContent(progress = getProgress()) {
       <p class="studio-hint">Je keuzes worden meteen bewaard.</p>
     </section>
   </div>
+  ${habitatView(profile, progress.level)}
   <section class="panel evolution-panel">
     <h2>Zo groeit je monster</h2>
     <ol class="milestones">
@@ -76,7 +88,15 @@ function atelierContent(progress = getProgress()) {
 
 function refreshAtelier(focusSelector) {
   const atelier = main.querySelector('#atelier');
+  const habitat = atelier.querySelector('#habitat-view');
+  const expanded = habitat?.open;
+  const viewDirection = habitat?.querySelector('[data-tilt][aria-pressed="true"]')?.dataset.tilt;
   atelier.innerHTML = atelierContent();
+  if (expanded) {
+    const next = atelier.querySelector('#habitat-view');
+    next.open = true;
+    if (viewDirection) tiltHabitat(next.querySelector(`[data-tilt="${viewDirection}"]`));
+  }
   drawArtwork(atelier);
   if (focusSelector) atelier.querySelector(focusSelector)?.focus({ preventScroll: true });
 }
@@ -114,8 +134,8 @@ function classRoster() {
     <ul>${demoReaders.map(reader => {
       const profile = state.students[reader.id];
       const { level } = personalGrowth(state, reader.id);
-      return `<li><div class="roster-art">${monsterCanvas(profile.look, level, profile.monsterName)}</div>
-        <strong>${escapeHTML(profile.monsterName)}</strong><span>Van ${reader.name}</span></li>`;
+      return `<li><div class="roster-art">${starterEgg(reader.id) ? artwork('camp', 'cover-art') : monsterCanvas(profile.look, level, profile.monsterName)}</div>
+        <strong>${starterEgg(reader.id) ? 'Monsterei' : escapeHTML(profile.monsterName)}</strong><span>Van ${reader.name}</span></li>`;
     }).join('')}</ul>
   </section>`;
 }
@@ -177,7 +197,7 @@ function classMonsterScreen(role) {
 }
 
 function badgesPanel() {
-  const badges = badgeProgress(player().entries, allStories());
+  const badges = badgeProgress(player().entries, [guideStory, ...allStories()]);
   return `<section class="panel badge-panel">
     <h2>Leesbadges</h2>
     <p class="muted">Beantwoord vier verschillende vragen goed per vaardigheid.</p>

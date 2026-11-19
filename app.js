@@ -11,7 +11,8 @@ const roles = {
     ['verhalen', 'Leesopdrachten', 'book'],
     ['monster', 'Monsteratelier', 'monster'],
     ['klasmonster', 'Klasmonster', 'users'],
-    ['voortgang', 'Mijn voortgang', 'chart']
+    ['voortgang', 'Mijn voortgang', 'chart'],
+    ['start', 'Startgids', 'spark']
   ] },
   leerkracht: { label: 'Leerkracht', user: 'Mevr. Peeters', initials: 'MP', home: 'klas', menu: [
     ['klas', 'Mijn klas', 'users'],
@@ -79,11 +80,15 @@ function allStories() {
   return [...stories, ...state.custom];
 }
 
+function storyById(id) {
+  return id === guideStory.id ? guideStory : allStories().find(story => story.id === id);
+}
+
 function readRoute() {
   const [requestedRole, requestedPage, id] = location.hash.slice(1).split('/');
   const role = Object.hasOwn(roles, requestedRole) ? requestedRole : 'leerling';
   const page = requestedPage || roles[role].home;
-  return { role, page, story: allStories().find(story => story.id === id) };
+  return { role, page, story: storyById(id) };
 }
 
 function href(role, page = roles[role].home, id) {
@@ -142,7 +147,8 @@ function navigation(route) {
   const activeLabel = profile.menu.find(([key]) => key === activePage)?.[1] ?? profile.menu[0][1];
 
   sidebar.innerHTML = `<a class="brand" href="${href(role)}">
-    <span class="brand-mark">${icon('monster', 25)}</span><span>Klassemonster</span>
+    <span class="brand-mark">${icon('monster', 25)}</span>
+    <span class="brand-text">Klassemonster<small>${role === 'leerling' ? 'Leesexpeditie' : role === 'leerkracht' ? 'Klasbeheer' : 'Ouderomgeving'}</small></span>
   </a>
   <nav class="main-nav" aria-label="Hoofdmenu">
     ${profile.menu.map(([key, label, image]) => `<a href="${href(role, key)}" ${key === activePage ? 'aria-current="page"' : ''}>${icon(image)}<span>${label}</span></a>`).join('')}
@@ -154,10 +160,10 @@ function navigation(route) {
 
   topbar.innerHTML = `<div class="breadcrumbs">${profile.label}<span aria-hidden="true">/</span><strong>${activeLabel}</strong></div>
     <details class="role-switch">
-      <summary aria-label="Wissel profiel of rol. ${person}, ${profile.label}"><span class="avatar ${tone}">${initials}</span><span class="profile-label"><strong>${person}</strong><small>${profile.label}</small></span>${icon('chevron', 17)}</summary>
+      <summary aria-label="Wissel profiel of rol. ${person}, ${profile.label}"><span class="avatar ${tone}">${initials}</span><span class="profile-label"><strong>${person}</strong><small>${role === 'leerling' && student.demoLabel ? student.demoLabel : profile.label}</small></span>${icon('chevron', 17)}</summary>
       <div class="role-menu">
         ${role !== 'leerkracht' ? `<label for="student-switch">Demoleerling
-          <select id="student-switch">${demoReaders.map(reader => `<option value="${reader.id}" ${reader.id === student.id ? 'selected' : ''}>${reader.name}</option>`).join('')}</select>
+          <select id="student-switch">${demoReaders.map(reader => `<option value="${reader.id}" ${reader.id === student.id ? 'selected' : ''}>${reader.name}${reader.demoLabel ? ' · ' + reader.demoLabel : ''}</option>`).join('')}</select>
         </label>` : ''}
       <nav aria-label="Wissel rol"><p>Wissel rol</p>
         ${Object.entries(roles).map(([key, entry]) => `<a href="${href(key)}" ${key === role ? 'aria-current="true"' : ''}>${entry.label}
@@ -221,8 +227,8 @@ function weeklyCard(progress) {
   const finished = progress.weekly >= state.goal;
   return `<section class="panel weekly-card">
     <div class="weekly-top"><span class="small-icon">${icon('target', 19)}</span><h2>Weekdoel</h2></div>
-    <p><strong>${progress.weekly} van ${state.goal}</strong> teksten gelezen</p>
-    <div class="weekly-progress" aria-label="${progress.weekly} van ${state.goal} teksten gelezen">${Array.from({ length: state.goal }, (_, index) => `<span class="${index < progress.weekly ? 'filled' : ''}" aria-hidden="true"></span>`).join('')}</div>
+    <p>${progress.weekly > state.goal ? `<strong>${progress.weekly}</strong> teksten gelezen · doel ${state.goal}` : `<strong>${progress.weekly} van ${state.goal}</strong> teksten gelezen`}</p>
+    <div class="weekly-progress" aria-hidden="true">${Array.from({ length: state.goal }, (_, index) => `<span class="${index < progress.weekly ? 'filled' : ''}"></span>`).join('')}</div>
     ${finished ? '<p class="goal-feedback">Je hebt je weekdoel gehaald!</p>' : ''}
   </section>`;
 }
@@ -233,11 +239,14 @@ function studentHome() {
   const items = allStories();
   const selected = items.find(story => story.id === ongoing)
     ?? items.find(story => !latestResult(story.id)) ?? stories[0];
-  const others = items.filter(story => story.id !== selected.id).slice(0, 2);
-  return pageHeading(`Hey, ${currentStudent().name}!`, 'Ontdek nieuwe verhalen en laat je monster groeien.')
+  const showGuide = currentStudent().id === 'robin' && player().guide.step < 4;
+  const others = (showGuide ? items : items.filter(story => story.id !== selected.id)).slice(0, 2);
+  return pageHeading(`Hey, ${currentStudent().name}!`, showGuide
+    ? 'Je startkamp staat klaar. Tijd om je eerste spoor te vinden.'
+    : 'Kies een verhaal en ontdek wat er tussen de regels staat.')
     + `<div class="dashboard-grid">
       <div class="dashboard-main">
-        ${featured(selected)}
+        ${showGuide ? expeditionHome() : featured(selected)}
         <section class="story-section">
           <div class="section-heading"><h2>Verder ontdekken</h2><a class="text-link" href="${href('leerling', 'verhalen')}">Alle opdrachten ${icon('arrow', 17)}</a></div>
           <div class="story-grid">${others.map(storyCard).join('')}</div>
@@ -274,7 +283,10 @@ function storyResults() {
 
 function allStoriesScreen() {
   const categories = [...new Set(allStories().map(story => story.category))].sort((a, b) => a.localeCompare(b, 'nl'));
-  return pageHeading('Leesbibliotheek', 'Zoek een onderwerp, kies een leesniveau of ga verder met een opdracht.')
+  return `<section class="library-banner">
+    ${pageHeading('Leesbibliotheek', 'Zoek een onderwerp, kies een leesniveau of ga verder met een opdracht.')}
+    <div class="library-banner-art">${artwork('clue', 'cover-art')}</div>
+  </section>`
     + `<div class="library-controls">
       <label class="search-control">${icon('search', 19)}<span class="visually-hidden">Zoek een tekst</span>
         <input id="story-search" type="search" placeholder="Zoek een tekst" maxlength="80" value="${escapeHTML(searchText)}"></label>
@@ -386,24 +398,29 @@ function submitQuestion(story, answer) {
   }
   if (draft.answers.some(answer => answer === null)) return;
 
+  recordResult(story, draft.answers);
+  delete player().drafts[story.id];
+  save();
+  navigate('leerling', 'resultaat', story.id);
+}
+
+function recordResult(story, answers) {
   const count = story.questions.length;
-  const correct = draft.answers.filter((answer, index) => answer === story.questions[index].correct).length;
+  const correct = answers.filter((answer, index) => answer === story.questions[index].correct).length;
   const percent = Math.round(correct * 100 / count);
   const progressBefore = getProgress();
   const classBefore = classGrowth(state);
-  const { entries, drafts } = player();
+  const { entries } = player();
   const earlier = entries.filter(entry => entry.id === story.id);
   const priorXP = earlier.reduce((sum, entry) => sum + entry.xp, 0);
   const xp = Math.max(0, 30 + Math.round(percent / 5) - priorXP);
-  const entry = { id: story.id, correct, count, percent, xp, answers: draft.answers, date: Date.now(), energy: earlier.length ? 0 : 1 };
+  const entry = { id: story.id, correct, count, percent, xp, answers: [...answers], date: Date.now(), energy: earlier.length ? 0 : 1 };
   entries.push(entry);
   const individual = getProgress();
   const collective = classGrowth(state);
   if (individual.level > progressBefore.level) entry.newLevel = individual.level;
   if (collective.stage > classBefore.stage) entry.classAdvance = collective.active.name;
-  delete drafts[story.id];
-  save();
-  navigate('leerling', 'resultaat', story.id);
+  return entry;
 }
 
 function resultScreen(story, result) {
@@ -457,15 +474,18 @@ function recentResults() {
   const resultByStory = new Map();
   for (const result of [...player().entries].reverse()) {
     if (resultByStory.has(result.id)) continue;
-    const story = allStories().find(story => story.id === result.id);
+    const story = storyById(result.id);
     if (story) resultByStory.set(result.id, { ...result, title: story.title });
   }
   return [...resultByStory.values(), ...sampleResults[state.activeStudent]];
 }
 
 function resultsList(role, limit = 5) {
+  const results = recentResults().slice(0, limit);
+  if (!results.length) return `<p class="no-results">Hier verschijnt de eerste score na het afronden van een tekst.</p>
+    ${role === 'leerling' ? `<a class="text-link" href="${href('leerling', 'start')}">Naar de startgids ${icon('arrow', 17)}</a>` : ''}`;
   return `<ul class="results-list">
-    ${recentResults().slice(0, limit).map(result => {
+    ${results.map(result => {
       const label = `<span class="result-book">${icon('book', 17)}</span><span>${escapeHTML(result.title)}</span><strong>${result.percent}%</strong>`;
       return `<li>${role === 'leerling' && result.id
         ? `<a class="result-row" href="${href('leerling', 'nakijken', result.id)}">${label}</a>`
@@ -484,14 +504,14 @@ function progressScreen(role) {
   const isParent = role === 'ouder';
   const recentOnly = isParent && readRoute().page === 'resultaten';
   if (recentOnly) return pageHeading(`Leesresultaten van ${name}`, `Klas ${escapeHTML(state.className)}`)
-    + `<section class="panel results-panel"><h2>Afgewerkte teksten</h2>${resultsList(role, allStories().length + sampleResults[state.activeStudent].length)}</section>`;
+    + `<section class="panel results-panel"><h2>Afgewerkte teksten</h2>${resultsList(role, Infinity)}</section>`;
 
   return pageHeading(isParent ? `Voortgang van ${name}` : 'Mijn voortgang', isParent
     ? `Bekijk de leesresultaten en het weekdoel van ${name} in klas ${escapeHTML(state.className)}.`
     : 'Elke tekst telt. Hier zie je wat je al hebt bereikt.')
     + `<dl class="stats-grid">
       ${stat('Teksten gelezen', progress.totalRead, 'book', 'sage')}
-      ${stat('Gemiddelde score', progress.average + '%', 'chart', 'lilac')}
+      ${stat('Gemiddelde score', progress.average === null ? '—' : progress.average + '%', 'chart', 'lilac')}
       ${stat('Monsterlevel', progress.level, 'monster', 'sand')}
     </dl>
     <div class="progress-grid">
@@ -499,10 +519,10 @@ function progressScreen(role) {
       ${weeklyCard(progress)}
       <section class="panel trend-panel">
         <h2>Scores per opdracht</h2>
-        <ol class="trend-chart">${recentResults().slice(0, 5).reverse().map(result => `<li>
+        ${recentResults().length === 0 ? '<p class="no-results">Er zijn nog geen scores om te vergelijken.</p>' : `<ol class="trend-chart">${recentResults().slice(0, 5).reverse().map(result => `<li>
           <div><span>${escapeHTML(result.title)}</span><strong>${result.percent}%</strong></div>
           ${meter(result.percent, 100, `Score voor ${escapeHTML(result.title)}`)}
-        </li>`).join('')}</ol>
+        </li>`).join('')}</ol>`}
       </section>
     </div>${badgesPanel()}`;
 }
@@ -537,7 +557,8 @@ function teacherScreen(page) {
     const progress = personalGrowth(state, reader.id);
     return { ...reader, read: progress.weekly, average: progress.average };
   });
-  const average = Math.round(readers.reduce((sum, reader) => sum + reader.average, 0) / readers.length);
+  const scores = readers.map(reader => reader.average).filter(Number.isFinite);
+  const average = Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length);
   return pageHeading(`Klas ${className}`, 'Bekijk de leesvoortgang van je leerlingen.', newAssignment)
     + `<dl class="stats-grid">
       ${stat('Leerlingen', readers.length, 'users', 'sage')}
@@ -550,7 +571,7 @@ function teacherScreen(page) {
         <thead><tr><th scope="col">Leerling</th><th scope="col">Gemiddelde score</th><th scope="col">Weekdoel</th></tr></thead>
         <tbody>${readers.map(reader => `<tr>
           <th scope="row"><span class="avatar ${reader.tone}">${reader.initials}</span>${reader.name}</th>
-          <td><strong>${reader.average}%</strong></td>
+          <td><strong>${reader.average === null ? '—' : reader.average + '%'}</strong></td>
           <td><span>${reader.read} / ${state.goal} teksten</span>${meter(Math.min(reader.read, state.goal), state.goal, `Weekdoel van ${reader.name}`)}</td>
         </tr>`).join('')}</tbody>
       </table></div>
@@ -641,6 +662,7 @@ function saveAssignment(form) {
 }
 
 function studentScreen(page, story) {
+  if (page === 'start' || (story?.id === guideStory.id && ['lezen', 'vragen'].includes(page))) return guideScreen();
   if (page === 'verhalen') return allStoriesScreen();
   if (page === 'monster') return monsterScreen();
   if (page === 'voortgang') return progressScreen('leerling');
@@ -656,6 +678,7 @@ function studentScreen(page, story) {
 
 function render({ focus = false } = {}) {
   const route = readRoute();
+  document.body.dataset.role = route.role;
   navigation(route);
   if (route.page === 'klasmonster') main.innerHTML = classMonsterScreen(route.role);
   else if (route.role === 'leerkracht') main.innerHTML = teacherScreen(route.page);
@@ -677,6 +700,8 @@ function renderQuestion() {
 main.addEventListener('click', event => {
   const button = event.target.closest('button');
   if (!button) return;
+  if (guideClick(button)) return;
+  if (button.hasAttribute('data-tilt')) tiltHabitat(button);
   if (button.dataset.filter) {
     activeFilter = button.dataset.filter;
     for (const filter of main.querySelectorAll('[data-filter]')) filter.setAttribute('aria-pressed', String(filter === button));
@@ -759,7 +784,16 @@ main.addEventListener('change', event => {
     refreshStoryResults();
     return;
   }
-  if (event.target.name !== 'answer') return;
+  if (event.target.name === 'starterColor') {
+    const preview = main.querySelector('#guide-monster');
+    const canvas = preview?.querySelector('canvas');
+    if (canvas && Object.hasOwn(monsterColors, event.target.value)) {
+      canvas.dataset.color = event.target.value;
+      drawArtwork(preview);
+    }
+    return;
+  }
+  if (event.target.name !== 'answer' || event.target.form?.id !== 'question-form') return;
   const draft = draftFor(readRoute().story);
   draft.answers[draft.index] = Number(event.target.value);
   draft.updated = Date.now();
@@ -774,6 +808,11 @@ main.addEventListener('input', event => {
 
 main.addEventListener('submit', event => {
   const form = event.target;
+  if (form.id === 'guide-identity' || form.id === 'guide-question') {
+    event.preventDefault();
+    guideSubmit(form);
+    return;
+  }
   if (form.id === 'question-form') {
     event.preventDefault();
     const answer = new FormData(form).get('answer');

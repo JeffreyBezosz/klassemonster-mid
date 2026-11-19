@@ -83,8 +83,9 @@ const stories = [
 ];
 
 const demoReaders = [
+  { id: 'robin', name: 'Robin', initials: 'R', tone: 'sage', xp: 0, classEnergy: 0, pet: 'Spruit', demoLabel: 'Startprofiel' },
   { id: 'milan', name: 'Milan', initials: 'M', tone: 'sage', xp: 520, classEnergy: 0, pet: 'Moss' },
-  { id: 'emma', name: 'Emma', initials: 'EV', tone: 'peach', xp: 660, classEnergy: 1, pet: 'Nova' },
+  { id: 'emma', name: 'Emma', initials: 'EV', tone: 'peach', xp: 660, classEnergy: 1, pet: 'Nova', demoLabel: 'Met voortgang' },
   { id: 'lars', name: 'Lars', initials: 'LD', tone: 'lilac', xp: 328, classEnergy: 1, pet: 'Nox' },
   { id: 'noah', name: 'Noah', initials: 'NC', tone: 'sand', xp: 165, classEnergy: 0, pet: 'Pip' },
   { id: 'ella', name: 'Ella', initials: 'EM', tone: 'peach', xp: 475, classEnergy: 0, pet: 'Vonk' }
@@ -94,4 +95,25 @@ const demoResults = [
   { title: 'De verdwenen fiets', percent: 80 },
   { title: 'Het dagboek in de kast', percent: 70 }
 ];
+
+const guideStory = {
+  id: 'gids-het-lichtspoor',
+  title: 'Het lichtspoor',
+  category: 'Startgids',
+  difficulty: 'Start',
+  minutes: 1,
+  art: 'trail',
+  words: [['Vondst', 'Iets dat je onderweg hebt gevonden.']],
+  paragraphs: [
+    'Bij de start van de avondwandeling geeft Fien haar groep een kaart. Op de kaart staan twee paden naar het uitkijkpunt. Het korte pad loopt over een houten brug. Het lange pad volgt de oever. Bij de brug hangt een rood lichtje. Op een bord staat: “Rood: brug dicht. Volg het pad langs het water.”',
+    'Timo kijkt naar de lege brug en wil toch het korte pad nemen. Fien wijst naar het lichtje. “Het bord zegt waarom we een tweede route hebben.” De groep volgt de oever. Even later vinden ze onderweg drie lichtgevende steentjes. Ze leggen er eentje bij de eerste bocht, zodat de volgende groep het juiste pad sneller ziet.'
+  ],
+  questions: [{
+    skill: 'Informatie vinden',
+    prompt: 'Waarom kiest de groep het pad langs de oever?',
+    options: ['Het is het kortste pad naar het uitkijkpunt.', 'Het rode lichtje geeft aan dat de brug dicht is.', 'Ze weten vooraf dat er lichtgevende steentjes liggen.'],
+    correct: 1,
+    feedback: 'Goed gezien. In de eerste alinea staat bij het rode lichtje: “Rood: brug dicht.” De groep kiest daarom het andere pad.'
+  }]
+};
 

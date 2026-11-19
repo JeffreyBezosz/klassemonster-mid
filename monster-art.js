@@ -152,10 +152,10 @@ function monsterAccessory(ctx, accessory, ink) {
   }
 }
 
-function drawCustomMonster(ctx, look, level, giant) {
+function drawCustomMonster(ctx, look, level, giant, cutout = false) {
   const colors = monsterColors[look.color] ?? monsterColors.sage;
   const [light, shade, outline, glow] = colors;
-  backdrop(ctx, habitats[look.home] ? look.home : 'meadow');
+  if (!cutout) backdrop(ctx, Object.hasOwn(habitats, look.home) ? look.home : 'meadow');
   const heights = [0.73, 0.81, 0.93, 1.02, 1.1, 1.17];
   const scale = heights[Math.min(heights.length, Math.max(1, level)) - 1];
   ellipse(ctx, 400, 413, 152 * scale * (giant ? 1.5 : 1), 20, '#22322c35');
@@ -186,7 +186,7 @@ function drawCustomMonster(ctx, look, level, giant) {
     sparkle(ctx, 90, -306, 16, '#f8e6b1');
   }
   ctx.restore();
-  grain(ctx, 263, 0.23);
+  if (!cutout) grain(ctx, 263, 0.23);
 }
 
 const extraCovers = {
