@@ -152,47 +152,28 @@ function doorArt(ctx) {
   grain(ctx, 31, 0.3);
 }
 
-function beastArt(ctx, level) {
-  ctx.fillStyle = gradient(ctx, '#e7efcd', '#c9dea8', [160, 0], [700, 480]);
-  ctx.fillRect(0, 0, 800, 480);
-  ellipse(ctx, 405, 400, 183, 22, '#587c4b38');
-  ctx.save();
-  ctx.translate(61, -22);
-  const outline = '#26463a';
-  shape(ctx, 'M 235 334 C 203 342 192 324 201 310 Q 213 294 230 309 Q 245 277 264 296 L 283 324 Z', '#5e9168', outline, 6);
-  shape(ctx, 'M 466 317 Q 501 295 516 265 Q 523 249 534 256 Q 546 262 540 277 Q 568 259 570 279 Q 569 288 557 300 Q 583 294 579 315 Q 568 346 513 351 L 475 355 Z', '#71a67a', outline, 6);
-  shape(ctx, 'M 252 178 C 216 159 218 105 243 83 Q 244 143 286 151 M 415 161 Q 467 130 455 86 Q 503 115 478 160 L 454 191 Z', '#e2c897', outline, 6);
-  shape(ctx, 'M 239 271 C 232 205 253 158 317 147 Q 329 120 361 119 L 351 140 Q 371 133 389 146 C 453 149 490 185 495 255 C 500 295 489 331 472 352 Q 485 375 461 387 Q 432 396 411 379 Q 368 397 326 380 Q 301 398 276 384 Q 263 376 273 354 C 253 337 240 306 239 271 Z', gradient(ctx, '#a1c58a', '#679b72', [265, 160], [489, 372]), outline, 7);
-  ellipse(ctx, 370, 304, 76, 57, '#c0d6a0');
-  ellipse(ctx, 319, 224, 28, 35, '#f6f1d2');
-  ellipse(ctx, 415, 219, 29, 35, '#f6f1d2');
-  ellipse(ctx, 327, 225, 11, 16, '#263f36');
-  ellipse(ctx, 423, 220, 11, 16, '#263f36');
-  ellipse(ctx, 331, 220, 3, 4, '#f6f1d2');
-  ellipse(ctx, 427, 215, 3, 4, '#f6f1d2');
-  ellipse(ctx, 283, 269, 14, 9, '#d99e85');
-  ellipse(ctx, 453, 260, 14, 9, '#d99e85');
-  shape(ctx, 'M 344 266 Q 367 292 392 263 Q 389 296 369 295 Q 350 294 344 266 Z', outline, outline, 3);
-  shape(ctx, 'M 353 273 L 364 278 362 285 Z M 381 273 L 389 267 386 280 Z', '#fcf1d3');
-  if (level >= 4) {
-    shape(ctx, 'M 266 289 Q 364 344 478 288 L 472 308 Q 431 330 404 330 L 438 361 407 372 375 337 Q 314 341 269 313 Z', '#dba56c', outline, 4);
-  }
-  ctx.restore();
-  [[173, 156, 17], [242, 106, 9], [624, 164, 21], [668, 249, 12], [591, 99, 7], [157, 309, 8]].forEach(([x, y, size]) => sparkle(ctx, x, y, size, '#fff5cb'));
-  grain(ctx, 31, 0.23);
-}
+const storyCoverCache = new Map();
 
 function drawArtwork(container) {
   for (const canvas of container.querySelectorAll('canvas[data-art]')) {
     const ctx = canvas.getContext('2d');
     if (!ctx) continue;
+    const drawing = canvas.dataset.art;
+    const cached = storyCoverCache.get(drawing);
+    if (cached && cached !== canvas) {
+      ctx.drawImage(cached, 0, 0, canvas.width, canvas.height);
+      continue;
+    }
     ctx.save();
     ctx.scale(canvas.width / 800, canvas.height / 480);
-    const drawing = canvas.dataset.art;
     if (drawing === 'radio') radioArt(ctx);
     else if (drawing === 'night') nightArt(ctx);
     else if (drawing === 'door') doorArt(ctx);
-    else beastArt(ctx, Number(canvas.dataset.level));
+    else if (drawing === 'custom-monster') {
+      const look = Object.fromEntries(monsterSlots.map(slot => [slot.id, canvas.dataset[slot.id]]));
+      drawCustomMonster(ctx, look, Number(canvas.dataset.level), canvas.dataset.giant === 'true');
+    } else if (Object.hasOwn(extraCovers, drawing)) extraCover(ctx, drawing);
     ctx.restore();
+    if (drawing !== 'custom-monster') storyCoverCache.set(drawing, canvas);
   }
 }

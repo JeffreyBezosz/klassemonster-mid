@@ -3,33 +3,26 @@ const sidebar = document.querySelector('#sidebar');
 const topbar = document.querySelector('#topbar');
 const dialog = document.querySelector('#dialog');
 const announcement = document.querySelector('#announcement');
-const storageKey = 'klassemonster-mid-v1';
-
-const defaults = {
-  entries: [], drafts: {}, custom: [], className: '1B', goal: 3, textSize: 1
-};
-const state = { ...defaults };
-try {
-  Object.assign(state, JSON.parse(localStorage.getItem(storageKey)) ?? {});
-} catch {
-  // De demo werkt ook in browsers zonder lokale opslag.
-}
+const state = loadGrowthState();
 
 const roles = {
-  leerling: { label: 'Leerling', user: 'Milan', initials: 'M', home: 'overzicht', menu: [
+  leerling: { label: 'Leerling', home: 'overzicht', menu: [
     ['overzicht', 'Overzicht', 'home'],
     ['verhalen', 'Leesopdrachten', 'book'],
-    ['monster', 'Mijn monster', 'monster'],
+    ['monster', 'Monsteratelier', 'monster'],
+    ['klasmonster', 'Klasmonster', 'users'],
     ['voortgang', 'Mijn voortgang', 'chart']
   ] },
   leerkracht: { label: 'Leerkracht', user: 'Mevr. Peeters', initials: 'MP', home: 'klas', menu: [
     ['klas', 'Mijn klas', 'users'],
     ['opdrachten', 'Klasopdrachten', 'book'],
+    ['klasmonster', 'Klasmonster', 'monster'],
     ['instellingen', 'Klasinstellingen', 'settings']
   ] },
-  ouder: { label: 'Ouder', user: 'Ouder van Milan', initials: 'OM', home: 'voortgang', menu: [
-    ['voortgang', 'Voortgang van Milan', 'chart'],
-    ['resultaten', 'Leesresultaten', 'book']
+  ouder: { label: 'Ouder', home: 'voortgang', menu: [
+    ['voortgang', 'Voortgang', 'chart'],
+    ['resultaten', 'Leesresultaten', 'book'],
+    ['klasmonster', 'Klasmonster', 'monster']
   ] }
 };
 
@@ -50,7 +43,10 @@ const iconPaths = {
   star: '<path d="M12 2.8l2.6 5.8 6.3.7-4.7 4.2 1.3 6.1-5.5-3.1-5.5 3.1 1.3-6.1-4.7-4.2 6.3-.7z"/>',
   target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
   list: '<path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01" stroke-width="2.4"/>',
-  spark: '<path d="M12 2c1.6 6.5 3.5 8.4 10 10-6.5 1.6-8.4 3.5-10 10C10.4 15.5 8.5 13.6 2 12 8.5 10.4 10.4 8.5 12 2z"/>'
+  spark: '<path d="M12 2c1.6 6.5 3.5 8.4 10 10-6.5 1.6-8.4 3.5-10 10C10.4 15.5 8.5 13.6 2 12 8.5 10.4 10.4 8.5 12 2z"/>',
+  lock: '<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 4v3"/>',
+  bookmark: '<path d="M6 4h12v17l-6-4-6 4z"/>',
+  search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/>'
 };
 
 function icon(name, size = 20) {
@@ -65,10 +61,18 @@ function escapeHTML(value) {
 
 function save() {
   try {
-    localStorage.setItem(storageKey, JSON.stringify(state));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch {
     // Wijzigingen blijven tijdens de huidige sessie beschikbaar.
   }
+}
+
+function player() {
+  return state.students[state.activeStudent];
+}
+
+function currentStudent() {
+  return demoReaders.find(reader => reader.id === state.activeStudent);
 }
 
 function allStories() {
@@ -104,47 +108,35 @@ function meter(value, max, label) {
 }
 
 function latestResult(id) {
-  return state.entries.findLast(entry => entry.id === id);
+  return player().entries.findLast(entry => entry.id === id);
 }
 
 function getProgress() {
-  const best = new Map();
-  const monday = new Date();
-  monday.setHours(0, 0, 0, 0);
-  monday.setDate(monday.getDate() - (monday.getDay() + 6) % 7);
-  const completedThisWeek = new Set();
-  for (const entry of state.entries) {
-    if (entry.percent > (best.get(entry.id) ?? -1)) best.set(entry.id, entry.percent);
-    if (entry.date >= monday.getTime()) completedThisWeek.add(entry.id);
-  }
-  const earned = state.entries.reduce((sum, entry) => sum + entry.xp, 0);
-  const total = 520 + earned;
-  const level = Math.floor(total / 200) + 1;
-  const aggregate = [...demoResults.map(entry => entry.percent), ...best.values()];
-  const average = Math.round(aggregate.reduce((sum, percent) => sum + percent, 0) / aggregate.length);
-  return {
-    level, xp: total % 200, earned, totalRead: 2 + best.size,
-    weekly: 2 + completedThisWeek.size, average, rank: levels[Math.min(level, levels.length) - 1]
-  };
+  return personalGrowth(state, state.activeStudent);
 }
 
 function draftFor(story) {
-  if (!state.drafts[story.id]) {
-    state.drafts[story.id] = {
+  const { drafts } = player();
+  if (!drafts[story.id]) {
+    drafts[story.id] = {
       step: 'lezen', index: 0, answers: Array(story.questions.length).fill(null), updated: Date.now()
     };
     save();
   }
-  return state.drafts[story.id];
+  return drafts[story.id];
 }
 
 function resumeLink(story) {
-  return href('leerling', state.drafts[story.id]?.step ?? 'lezen', story.id);
+  return href('leerling', player().drafts[story.id]?.step ?? 'lezen', story.id);
 }
 
 function navigation(route) {
   const { role, page } = route;
   const profile = roles[role];
+  const student = currentStudent();
+  const person = role === 'leerkracht' ? profile.user : role === 'ouder' ? `Ouder van ${student.name}` : student.name;
+  const initials = role === 'leerkracht' ? profile.initials : role === 'ouder' ? `O${student.initials[0]}` : student.initials;
+  const tone = role === 'leerkracht' ? 'sage' : student.tone;
   const activePage = role === 'leerling' && ['lezen', 'vragen', 'resultaat', 'nakijken'].includes(page) ? 'verhalen' : page;
   const progress = getProgress();
   const activeLabel = profile.menu.find(([key]) => key === activePage)?.[1] ?? profile.menu[0][1];
@@ -156,17 +148,21 @@ function navigation(route) {
     ${profile.menu.map(([key, label, image]) => `<a href="${href(role, key)}" ${key === activePage ? 'aria-current="page"' : ''}>${icon(image)}<span>${label}</span></a>`).join('')}
   </nav>
   <div class="sidebar-bottom">
-    ${role === 'leerling' ? `<a class="side-progress" href="${href('leerling', 'monster')}"><span>${icon('spark', 17)} Level ${progress.level}</span><strong>${progress.xp} / 200 XP</strong></a>` : ''}
+    ${role === 'leerling' ? `<a class="side-progress" href="${href('leerling', 'monster')}"><span>${icon('spark', 17)} Level ${progress.level}</span><strong>${progress.xp} / ${LEVEL_XP} XP</strong></a>` : ''}
     <p><span class="class-dot" aria-hidden="true"></span>Klas ${escapeHTML(state.className)} <span class="sidebar-divider" aria-hidden="true">·</span> Eerste middelbaar</p>
   </div>`;
 
   topbar.innerHTML = `<div class="breadcrumbs">${profile.label}<span aria-hidden="true">/</span><strong>${activeLabel}</strong></div>
     <details class="role-switch">
-      <summary aria-label="Wissel rol. Huidige rol: ${profile.label}"><span class="avatar sage">${profile.initials}</span><span class="profile-label"><strong>${profile.user}</strong><small>${profile.label}</small></span>${icon('chevron', 17)}</summary>
-      <nav class="role-menu" aria-label="Wissel rol"><p>Wissel rol</p>
+      <summary aria-label="Wissel profiel of rol. ${person}, ${profile.label}"><span class="avatar ${tone}">${initials}</span><span class="profile-label"><strong>${person}</strong><small>${profile.label}</small></span>${icon('chevron', 17)}</summary>
+      <div class="role-menu">
+        ${role !== 'leerkracht' ? `<label for="student-switch">Demoleerling
+          <select id="student-switch">${demoReaders.map(reader => `<option value="${reader.id}" ${reader.id === student.id ? 'selected' : ''}>${reader.name}</option>`).join('')}</select>
+        </label>` : ''}
+      <nav aria-label="Wissel rol"><p>Wissel rol</p>
         ${Object.entries(roles).map(([key, entry]) => `<a href="${href(key)}" ${key === role ? 'aria-current="true"' : ''}>${entry.label}
           ${key === role ? icon('check', 16) : ''}</a>`).join('')}
-      </nav>
+      </nav></div>
     </details>`;
 }
 
@@ -176,13 +172,20 @@ function pageHeading(title, subtitle, action = '') {
 
 function meta(story, className = '') {
   return `<div class="meta ${className}"><span class="chip ${story.art}">${escapeHTML(story.category)}</span>
-    <span>${icon('clock', 15)} ${story.minutes} min</span></div>`;
+    <span>${icon('clock', 15)} ${story.minutes} min</span><span class="difficulty">${story.difficulty ?? 'Verder'}</span></div>`;
 }
 
 function storyStatus(story) {
-  if (state.drafts[story.id]) return '<span class="status-chip">Bezig</span>';
+  if (player().drafts[story.id]) return '<span class="status-chip">Bezig</span>';
   const done = latestResult(story.id);
   return done ? `<span class="status-chip done">${icon('check', 14)} ${done.correct}/${done.count}</span>` : '';
+}
+
+function bookmarkButton(story) {
+  const saved = player().saved.includes(story.id);
+  const label = saved ? 'Verwijder uit bewaard' : 'Bewaar voor later';
+  return `<button class="icon-button bookmark-button" type="button" data-favorite="${story.id}"
+    aria-pressed="${saved}" aria-label="${label}: ${escapeHTML(story.title)}" title="${label}">${icon('bookmark', 19)}</button>`;
 }
 
 function storyCard(story) {
@@ -196,12 +199,12 @@ function storyCard(story) {
         <div class="card-bottom"><span>${story.questions.length} ${story.questions.length === 1 ? 'vraag' : 'vragen'}</span>
           ${storyStatus(story)}<span class="card-arrow">${icon('arrow', 19)}</span></div>
       </div>
-    </a>
+    </a>${bookmarkButton(story)}
   </article>`;
 }
 
 function featured(story) {
-  const ongoing = Boolean(state.drafts[story.id]);
+  const ongoing = Boolean(player().drafts[story.id]);
   return `<section class="featured">
     <div class="featured-copy">
       <div class="feature-eyebrow">${icon(ongoing ? 'book' : 'spark', 16)} ${ongoing ? 'Je bent al begonnen' : 'Uitgelicht'}</div>
@@ -211,18 +214,6 @@ function featured(story) {
       <a class="button primary" href="${resumeLink(story)}">${ongoing ? 'Ga verder' : 'Start leesopdracht'} ${icon('arrow', 17)}</a>
     </div>
     <div class="featured-art ${story.art}">${artwork(story.art, 'cover-art')}</div>
-  </section>`;
-}
-
-function monsterCard(progress, detail = false) {
-  return `<section class="panel monster-card">
-    ${detail ? '' : '<h2>Mijn monster</h2>'}
-    <div class="monster-picture">${artwork('beast', 'cover-art', progress.level)}<span class="level-tag">Level ${progress.level}</span></div>
-    <div class="monster-level"><strong>${progress.rank}</strong><span>${progress.xp} / 200 XP</span></div>
-    ${meter(progress.xp, 200, 'XP voor het volgende level')}
-    ${detail
-      ? `<p class="muted">Nog ${200 - progress.xp} XP tot level ${progress.level + 1}.</p>`
-      : `<a class="text-link" href="${href('leerling', 'monster')}">Bekijk mijn monster ${icon('arrow', 17)}</a>`}
   </section>`;
 }
 
@@ -238,12 +229,12 @@ function weeklyCard(progress) {
 
 function studentHome() {
   const progress = getProgress();
-  const ongoing = Object.entries(state.drafts).sort((a, b) => b[1].updated - a[1].updated)[0]?.[0];
+  const ongoing = Object.entries(player().drafts).sort((a, b) => b[1].updated - a[1].updated)[0]?.[0];
   const items = allStories();
   const selected = items.find(story => story.id === ongoing)
     ?? items.find(story => !latestResult(story.id)) ?? stories[0];
   const others = items.filter(story => story.id !== selected.id).slice(0, 2);
-  return pageHeading('Hey, Milan!', 'Kies een tekst en ontdek wat er tussen de regels staat.')
+  return pageHeading(`Hey, ${currentStudent().name}!`, 'Ontdek nieuwe verhalen en laat je monster groeien.')
     + `<div class="dashboard-grid">
       <div class="dashboard-main">
         ${featured(selected)}
@@ -252,28 +243,57 @@ function studentHome() {
           <div class="story-grid">${others.map(storyCard).join('')}</div>
         </section>
       </div>
-      <div class="dashboard-aside">${monsterCard(progress)}${weeklyCard(progress)}</div>
+      <div class="dashboard-aside">${monsterCard(progress)}${classMonsterCard()}${weeklyCard(progress)}</div>
     </div>`;
 }
 
-const filters = ['Alles', 'Te doen', 'Bezig', 'Afgewerkt'];
+const filters = ['Alles', 'Te doen', 'Bezig', 'Afgewerkt', 'Bewaard'];
 let activeFilter = 'Alles';
+let activeCategory = '';
+let activeDifficulty = '';
+let searchText = '';
 
-function allStoriesScreen() {
+function storyResults() {
+  const query = searchText.trim().toLocaleLowerCase('nl');
   const items = allStories().filter(story => {
-    const draft = state.drafts[story.id];
+    if (activeCategory && story.category !== activeCategory) return false;
+    if (activeDifficulty && (story.difficulty ?? 'Verder') !== activeDifficulty) return false;
+    if (query && !`${story.title} ${story.teaser} ${story.category}`.toLocaleLowerCase('nl').includes(query)) return false;
+    const draft = player().drafts[story.id];
     const done = latestResult(story.id);
     if (activeFilter === 'Te doen') return !draft && !done;
     if (activeFilter === 'Bezig') return Boolean(draft);
     if (activeFilter === 'Afgewerkt') return Boolean(done);
+    if (activeFilter === 'Bewaard') return player().saved.includes(story.id);
     return true;
   });
-  return pageHeading('Leesopdrachten', 'Kies zelf wat je leest of ga verder waar je gestopt bent.')
+  return `<p class="result-count" role="status">${items.length} ${items.length === 1 ? 'tekst' : 'teksten'}</p>
+    ${items.length ? `<div class="story-grid all-stories">${items.map(storyCard).join('')}</div>`
+      : '<p class="empty-state">Geen teksten gevonden. Pas je zoekterm of filters aan.</p>'}`;
+}
+
+function allStoriesScreen() {
+  const categories = [...new Set(allStories().map(story => story.category))].sort((a, b) => a.localeCompare(b, 'nl'));
+  return pageHeading('Leesbibliotheek', 'Zoek een onderwerp, kies een leesniveau of ga verder met een opdracht.')
+    + `<div class="library-controls">
+      <label class="search-control">${icon('search', 19)}<span class="visually-hidden">Zoek een tekst</span>
+        <input id="story-search" type="search" placeholder="Zoek een tekst" maxlength="80" value="${escapeHTML(searchText)}"></label>
+      <label><span class="visually-hidden">Genre</span>
+        <select id="story-category"><option value="">Alle genres</option>${categories.map(category => `<option ${category === activeCategory ? 'selected' : ''}>${escapeHTML(category)}</option>`).join('')}</select></label>
+      <label><span class="visually-hidden">Leesniveau</span>
+        <select id="story-difficulty"><option value="">Alle niveaus</option>${['Start', 'Verder', 'Uitdaging'].map(level => `<option ${level === activeDifficulty ? 'selected' : ''}>${level}</option>`).join('')}</select></label>
+    </div>`
     + `<div class="filters" aria-label="Filter opdrachten">
       ${filters.map(filter => `<button type="button" class="filter" data-filter="${filter}" aria-pressed="${filter === activeFilter}">${filter}</button>`).join('')}
     </div>
-    ${items.length ? `<div class="story-grid all-stories">${items.map(storyCard).join('')}</div>`
-      : '<p class="empty-state">Geen opdrachten in deze lijst. Kies een andere filter.</p>'}`;
+    <div id="story-results">${storyResults()}</div>`;
+}
+
+function refreshStoryResults() {
+  const results = main.querySelector('#story-results');
+  if (!results) return;
+  results.innerHTML = storyResults();
+  drawArtwork(results);
 }
 
 function readerSteps(active) {
@@ -295,13 +315,14 @@ function paragraphs(story) {
 
 function readingScreen(story) {
   const draft = draftFor(story);
-  const setting = state.textSize;
+  const setting = player().textSize;
   return `<div class="reading-layout">
     ${readerHeader(story, 0)}
     <div class="reading-controls">${meta(story)}
       <div class="type-controls" aria-label="Tekstgrootte">
         <button type="button" class="icon-button" data-text-size="-1" aria-label="Tekst verkleinen" ${setting === 0 ? 'disabled' : ''}>A−</button>
         <button type="button" class="icon-button" data-text-size="1" aria-label="Tekst vergroten" ${setting === 2 ? 'disabled' : ''}>A+</button>
+        ${bookmarkButton(story)}
       </div>
     </div>
     <article class="panel reading-text size-${setting}" aria-label="Leestekst">${paragraphs(story)}</article>
@@ -347,7 +368,7 @@ function questionScreen(story) {
       </form>
     </section>
     <details class="panel words"><summary>${icon('book', 19)} Tekst erbij nemen ${icon('chevron', 16)}</summary>
-      <div class="reading-text size-${state.textSize}">${paragraphs(story)}</div>
+      <div class="reading-text size-${player().textSize}">${paragraphs(story)}</div>
     </details>
   </div>`;
 }
@@ -368,10 +389,19 @@ function submitQuestion(story, answer) {
   const count = story.questions.length;
   const correct = draft.answers.filter((answer, index) => answer === story.questions[index].correct).length;
   const percent = Math.round(correct * 100 / count);
-  const priorXP = state.entries.filter(entry => entry.id === story.id).reduce((sum, entry) => sum + entry.xp, 0);
+  const progressBefore = getProgress();
+  const classBefore = classGrowth(state);
+  const { entries, drafts } = player();
+  const earlier = entries.filter(entry => entry.id === story.id);
+  const priorXP = earlier.reduce((sum, entry) => sum + entry.xp, 0);
   const xp = Math.max(0, 30 + Math.round(percent / 5) - priorXP);
-  state.entries.push({ id: story.id, correct, count, percent, xp, answers: draft.answers, date: Date.now() });
-  delete state.drafts[story.id];
+  const entry = { id: story.id, correct, count, percent, xp, answers: draft.answers, date: Date.now(), energy: earlier.length ? 0 : 1 };
+  entries.push(entry);
+  const individual = getProgress();
+  const collective = classGrowth(state);
+  if (individual.level > progressBefore.level) entry.newLevel = individual.level;
+  if (collective.stage > classBefore.stage) entry.classAdvance = collective.active.name;
+  delete drafts[story.id];
   save();
   navigate('leerling', 'resultaat', story.id);
 }
@@ -381,11 +411,16 @@ function resultScreen(story, result) {
     ${readerHeader(story, 2, 'Opdracht afgerond')}
     <section class="panel result-panel">
       <div class="result-star">${icon(result.percent >= 60 ? 'star' : 'check', 34)}</div>
-      <h2>${result.percent >= 60 ? 'Goed gelezen, Milan!' : 'Elke tekst helpt je groeien.'}</h2>
+      <h2>${result.percent >= 60 ? `Goed gelezen, ${currentStudent().name}!` : 'Elke tekst helpt je groeien.'}</h2>
       <p>${escapeHTML(story.title)}</p>
       <div class="result-score"><strong>${result.correct}<span> / ${result.count}</span></strong><span>juist beantwoord</span></div>
       ${meter(result.percent, 100, 'Score')}
-      <p class="result-xp">${icon('spark', 19)} ${result.xp ? `+${result.xp} XP voor je monster` : 'Je monster behoudt zijn verdiende XP'}</p>
+      <div class="result-rewards">
+        <p class="result-xp">${icon('spark', 19)} ${result.xp ? `+${result.xp} XP voor ${escapeHTML(player().monsterName)}` : 'Je monster behoudt zijn verdiende XP'}</p>
+        ${result.energy ? `<a class="result-xp class-reward" href="${href('leerling', 'klasmonster')}">${icon('users', 18)} +1 energie voor Atlas</a>` : ''}
+      </div>
+      ${result.newLevel ? `<p class="reward-detail">Je monster is gegroeid naar level ${result.newLevel}.</p>` : ''}
+      ${result.classAdvance ? `<p class="reward-detail">Atlas is gegroeid tot ${escapeHTML(result.classAdvance)}!</p>` : ''}
       <div class="result-actions">
         <a class="button secondary" href="${href('leerling')}">Naar overzicht</a>
         <a class="button primary" href="${href('leerling', 'nakijken', story.id)}">Bekijk je antwoorden ${icon('arrow', 17)}</a>
@@ -420,12 +455,12 @@ function reviewScreen(story, result) {
 
 function recentResults() {
   const resultByStory = new Map();
-  for (const result of [...state.entries].reverse()) {
+  for (const result of [...player().entries].reverse()) {
     if (resultByStory.has(result.id)) continue;
     const story = allStories().find(story => story.id === result.id);
     if (story) resultByStory.set(result.id, { ...result, title: story.title });
   }
-  return [...resultByStory.values(), ...demoResults];
+  return [...resultByStory.values(), ...sampleResults[state.activeStudent]];
 }
 
 function resultsList(role, limit = 5) {
@@ -445,13 +480,14 @@ function stat(label, value, image, tone) {
 
 function progressScreen(role) {
   const progress = getProgress();
+  const { name } = currentStudent();
   const isParent = role === 'ouder';
   const recentOnly = isParent && readRoute().page === 'resultaten';
-  if (recentOnly) return pageHeading('Leesresultaten van Milan', `Klas ${escapeHTML(state.className)}`)
-    + `<section class="panel results-panel"><h2>Afgewerkte teksten</h2>${resultsList(role, allStories().length + demoResults.length)}</section>`;
+  if (recentOnly) return pageHeading(`Leesresultaten van ${name}`, `Klas ${escapeHTML(state.className)}`)
+    + `<section class="panel results-panel"><h2>Afgewerkte teksten</h2>${resultsList(role, allStories().length + sampleResults[state.activeStudent].length)}</section>`;
 
-  return pageHeading(isParent ? 'Voortgang van Milan' : 'Mijn voortgang', isParent
-    ? `Bekijk Milans leesresultaten en weekdoel in klas ${escapeHTML(state.className)}.`
+  return pageHeading(isParent ? `Voortgang van ${name}` : 'Mijn voortgang', isParent
+    ? `Bekijk de leesresultaten en het weekdoel van ${name} in klas ${escapeHTML(state.className)}.`
     : 'Elke tekst telt. Hier zie je wat je al hebt bereikt.')
     + `<dl class="stats-grid">
       ${stat('Teksten gelezen', progress.totalRead, 'book', 'sage')}
@@ -468,22 +504,7 @@ function progressScreen(role) {
           ${meter(result.percent, 100, `Score voor ${escapeHTML(result.title)}`)}
         </li>`).join('')}</ol>
       </section>
-    </div>`;
-}
-
-function monsterScreen() {
-  const progress = getProgress();
-  return pageHeading('Mijn monster', 'Voltooi opdrachten om XP te verdienen en je monster te laten groeien.')
-    + `<div class="monster-grid">
-      ${monsterCard(progress, true)}
-      <section class="panel levels-panel"><h2>Monsterniveaus</h2>
-        <ol>${levels.map((rank, index) => `<li ${progress.level === index + 1 ? 'aria-current="step"' : ''}>
-          <span class="level-number">${index + 1}</span><span>${rank}</span>
-          ${progress.level === index + 1 ? '<strong>Jouw level</strong>' : progress.level > index + 1 ? icon('check', 18) : ''}
-        </li>`).join('')}</ol>
-        <a class="button primary" href="${href('leerling', 'verhalen')}">Kies een opdracht ${icon('arrow', 17)}</a>
-      </section>
-    </div>`;
+    </div>${badgesPanel()}`;
 }
 
 function teacherScreen(page) {
@@ -512,9 +533,10 @@ function teacherScreen(page) {
       </form>`;
   }
 
-  const progress = getProgress();
-  const readers = demoReaders.map(reader => reader.name === 'Milan'
-    ? { ...reader, read: progress.weekly, average: progress.average } : reader);
+  const readers = demoReaders.map(reader => {
+    const progress = personalGrowth(state, reader.id);
+    return { ...reader, read: progress.weekly, average: progress.average };
+  });
   const average = Math.round(readers.reduce((sum, reader) => sum + reader.average, 0) / readers.length);
   return pageHeading(`Klas ${className}`, 'Bekijk de leesvoortgang van je leerlingen.', newAssignment)
     + `<dl class="stats-grid">
@@ -564,6 +586,7 @@ function composeAssignment() {
   </div>
   <form id="assignment-form" class="compose-form">
     <label>Titel <input name="title" required maxlength="90" autofocus></label>
+    <label>Leesniveau <select name="difficulty"><option>Start</option><option selected>Verder</option><option>Uitdaging</option></select></label>
     <label>Leestekst <textarea name="passage" rows="5" required maxlength="5000"></textarea></label>
     <div id="question-fields">${questionFields(0)}</div>
     <button class="button secondary" type="button" data-add-question>${icon('plus', 17)} Vraag toevoegen</button>
@@ -605,6 +628,7 @@ function saveAssignment(form) {
 
   state.custom.push({
     id: `klas-${Date.now()}-${state.custom.length}`, title, category: 'Klasopdracht', art: 'door',
+    difficulty: ['Start', 'Verder', 'Uitdaging'].includes(text('difficulty')) ? text('difficulty') : 'Verder',
     minutes: Math.max(1, Math.ceil(passage.split(/\s+/).length / 125)),
     teaser: passage.length > 118 ? passage.slice(0, 118).trimEnd() + '…' : passage,
     words: [], paragraphs: passage.split(/\r?\n+/).map(line => line.trim()).filter(Boolean), questions
@@ -633,7 +657,8 @@ function studentScreen(page, story) {
 function render({ focus = false } = {}) {
   const route = readRoute();
   navigation(route);
-  if (route.role === 'leerkracht') main.innerHTML = teacherScreen(route.page);
+  if (route.page === 'klasmonster') main.innerHTML = classMonsterScreen(route.role);
+  else if (route.role === 'leerkracht') main.innerHTML = teacherScreen(route.page);
   else if (route.role === 'ouder') main.innerHTML = progressScreen('ouder');
   else main.innerHTML = studentScreen(route.page, route.story);
   drawArtwork(main);
@@ -654,15 +679,16 @@ main.addEventListener('click', event => {
   if (!button) return;
   if (button.dataset.filter) {
     activeFilter = button.dataset.filter;
-    render();
-    main.querySelector('.filter[aria-pressed="true"]').focus();
+    for (const filter of main.querySelectorAll('[data-filter]')) filter.setAttribute('aria-pressed', String(filter === button));
+    refreshStoryResults();
   }
   if (button.dataset.textSize) {
-    const old = state.textSize;
-    state.textSize = Math.min(2, Math.max(0, old + Number(button.dataset.textSize)));
-    main.querySelector('.reading-text').classList.replace(`size-${old}`, `size-${state.textSize}`);
+    const profile = player();
+    const old = profile.textSize;
+    profile.textSize = Math.min(2, Math.max(0, old + Number(button.dataset.textSize)));
+    main.querySelector('.reading-text').classList.replace(`size-${old}`, `size-${profile.textSize}`);
     for (const control of main.querySelectorAll('[data-text-size]')) {
-      control.disabled = Number(control.dataset.textSize) < 0 ? state.textSize === 0 : state.textSize === 2;
+      control.disabled = Number(control.dataset.textSize) < 0 ? profile.textSize === 0 : profile.textSize === 2;
     }
     if (button.disabled) main.querySelector('[data-text-size]:not(:disabled)').focus();
     save();
@@ -679,14 +705,71 @@ main.addEventListener('click', event => {
     }
   }
   if (button.dataset.action === 'compose') composeAssignment();
+  if (button.dataset.action === 'shuffle') shuffleMonster();
+  if (button.dataset.monsterSlot) {
+    activeMonsterSlot = button.dataset.monsterSlot;
+    refreshAtelier(`[data-monster-slot="${activeMonsterSlot}"]`);
+  }
+  if (button.dataset.monsterOption) {
+    const slot = monsterSlots.find(slot => slot.id === activeMonsterSlot);
+    const choice = slot.items.find(([id]) => id === button.dataset.monsterOption);
+    if (!choice || choice[2] > getProgress().level) return;
+    player().look[slot.id] = choice[0];
+    save();
+    refreshAtelier(`[data-monster-option="${choice[0]}"]`);
+    say(`${choice[1]} geselecteerd.`);
+  }
+  if (button.dataset.classVote) {
+    const choice = classStyles.find(style => style.id === button.dataset.classVote);
+    if (!choice || readRoute().role !== 'leerling' || classGrowth(state).stage === 0) return;
+    const removed = state.votes[state.activeStudent] === choice.id;
+    if (removed) delete state.votes[state.activeStudent];
+    else state.votes[state.activeStudent] = choice.id;
+    save();
+    render();
+    main.querySelector(`[data-class-vote="${choice.id}"]`)?.focus({ preventScroll: true });
+    say(removed ? 'Je stem is verwijderd.' : `Je stem voor ${choice.name} is bewaard.`);
+  }
+  if (button.dataset.favorite) {
+    const story = allStories().find(story => story.id === button.dataset.favorite);
+    if (!story) return;
+    const saved = player().saved;
+    const index = saved.indexOf(story.id);
+    if (index < 0) saved.push(story.id);
+    else saved.splice(index, 1);
+    save();
+    if (readRoute().page === 'verhalen') {
+      refreshStoryResults();
+      (main.querySelector(`[data-favorite="${story.id}"]`) ?? main.querySelector('[data-filter][aria-pressed="true"]'))?.focus({ preventScroll: true });
+    } else {
+      const enabled = index < 0;
+      const label = enabled ? 'Verwijder uit bewaard' : 'Bewaar voor later';
+      button.setAttribute('aria-pressed', String(enabled));
+      button.setAttribute('aria-label', `${label}: ${story.title}`);
+      button.title = label;
+    }
+    say(index < 0 ? 'Tekst bewaard.' : 'Tekst verwijderd uit bewaard.');
+  }
 });
 
 main.addEventListener('change', event => {
+  if (event.target.id === 'story-category' || event.target.id === 'story-difficulty') {
+    if (event.target.id === 'story-category') activeCategory = event.target.value;
+    else activeDifficulty = event.target.value;
+    refreshStoryResults();
+    return;
+  }
   if (event.target.name !== 'answer') return;
   const draft = draftFor(readRoute().story);
   draft.answers[draft.index] = Number(event.target.value);
   draft.updated = Date.now();
   save();
+});
+
+main.addEventListener('input', event => {
+  if (event.target.id !== 'story-search') return;
+  searchText = event.target.value;
+  refreshStoryResults();
 });
 
 main.addEventListener('submit', event => {
@@ -711,6 +794,18 @@ main.addEventListener('submit', event => {
     navigation(readRoute());
     form.querySelector('.form-error').textContent = '';
     form.querySelector('.settings-saved').textContent = 'Instellingen opgeslagen.';
+  }
+  if (form.id === 'monster-name-form') {
+    event.preventDefault();
+    const name = String(new FormData(form).get('monsterName') ?? '').trim();
+    if (!name || name.length > 24) {
+      form.querySelector('.form-error').textContent = 'Gebruik een naam van 1 tot 24 tekens.';
+      return;
+    }
+    player().monsterName = name;
+    save();
+    refreshAtelier('#monster-name-form input');
+    say('De naam van je monster is bewaard.');
   }
 });
 
@@ -740,6 +835,20 @@ dialog.addEventListener('submit', event => {
 
 topbar.addEventListener('click', event => {
   if (event.target.closest('.role-menu a')) topbar.querySelector('.role-switch').open = false;
+});
+
+topbar.addEventListener('change', event => {
+  if (event.target.id !== 'student-switch' || !Object.hasOwn(state.students, event.target.value)) return;
+  const { role, page } = readRoute();
+  state.activeStudent = event.target.value;
+  activeFilter = 'Alles';
+  activeCategory = '';
+  activeDifficulty = '';
+  searchText = '';
+  save();
+  if (page === roles[role].home) render({ focus: true });
+  else navigate(role, roles[role].home);
+  say(`Demoleerling ${currentStudent().name} geselecteerd.`);
 });
 
 document.addEventListener('click', event => {

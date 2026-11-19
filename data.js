@@ -3,6 +3,7 @@ const stories = [
     id: 'signaal',
     title: 'Het signaal om 23:17',
     category: 'Mysterie',
+    difficulty: 'Verder',
     minutes: 5,
     art: 'radio',
     teaser: 'Elke avond kraakt er een radio in de lege fietsenstalling. Noor probeert te achterhalen wie er aan de andere kant zit.',
@@ -31,6 +32,7 @@ const stories = [
     id: 'stad',
     title: 'Een stad voor de nacht',
     category: 'Natuur',
+    difficulty: 'Start',
     minutes: 4,
     art: 'night',
     teaser: 'Als de straten stilvallen, begint voor sommige dieren de drukste tijd van de dag.',
@@ -56,6 +58,7 @@ const stories = [
     id: 'kamer',
     title: 'De kamer achter de muur',
     category: 'Avontuur',
+    difficulty: 'Verder',
     minutes: 4,
     art: 'door',
     teaser: 'Een oude plattegrond en een vreemd detail wijzen Aya naar een vergeten kamer.',
@@ -80,11 +83,11 @@ const stories = [
 ];
 
 const demoReaders = [
-  { name: 'Emma', initials: 'EV', read: 3, average: 90, tone: 'peach' },
-  { name: 'Milan', initials: 'M', tone: 'sage' },
-  { name: 'Lars', initials: 'LD', read: 2, average: 78, tone: 'lilac' },
-  { name: 'Noah', initials: 'NC', read: 1, average: 72, tone: 'sand' },
-  { name: 'Ella', initials: 'EM', read: 2, average: 86, tone: 'peach' }
+  { id: 'milan', name: 'Milan', initials: 'M', tone: 'sage', xp: 520, classEnergy: 0, pet: 'Moss' },
+  { id: 'emma', name: 'Emma', initials: 'EV', tone: 'peach', xp: 660, classEnergy: 1, pet: 'Nova' },
+  { id: 'lars', name: 'Lars', initials: 'LD', tone: 'lilac', xp: 328, classEnergy: 1, pet: 'Nox' },
+  { id: 'noah', name: 'Noah', initials: 'NC', tone: 'sand', xp: 165, classEnergy: 0, pet: 'Pip' },
+  { id: 'ella', name: 'Ella', initials: 'EM', tone: 'peach', xp: 475, classEnergy: 0, pet: 'Vonk' }
 ];
 
 const demoResults = [
@@ -92,4 +95,3 @@ const demoResults = [
   { title: 'Het dagboek in de kast', percent: 70 }
 ];
 
-const levels = ['Ontdekker', 'Speurder', 'Spoorzoeker', 'Verhalenjager', 'Meesterlezer'];
